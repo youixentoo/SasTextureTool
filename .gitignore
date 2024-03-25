@@ -1,4 +1,4 @@
-# Private and stuff that shouoldn't be on github
+# Private and stuff that shouldn't be on github
 .env
 passw.py
 *.jet
