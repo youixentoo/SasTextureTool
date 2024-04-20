@@ -18,6 +18,10 @@ import rpack
 
 cus_tk.set_appearance_mode("system")
 cus_tk.set_default_color_theme("blue")
+
+
+class CombineSheetXYError(Exception):
+    pass
         
 class SpriteSheet():
     # Modified https://stackoverflow.com/a/45527493
@@ -37,7 +41,7 @@ class SpriteSheet():
                         self.file_type = node.attrib.get('type')
                     else:
                         name = node.attrib.get('name')
-                        self.map[name] = {}
+                        self.map[name] = {} 
                         self.map[name]['x'] = int(node.attrib.get('x'))
                         self.map[name]['y'] = int(node.attrib.get('y'))
                         self.map[name]['w'] = int(node.attrib.get('w'))
@@ -61,8 +65,20 @@ class SpriteSheet():
     def get_sprite_info(self, name):
         return self.map.get(name)
 
+    # Nk is uhh :brown_circle: and made sprites 1 pixel bigger on all sides
+    # Unmodified nk jets never go to the else statements
     def get_image_name(self, name):
-        return self.spritesheet[self.map[name]['y']:self.map[name]['y']+self.map[name]['h'], self.map[name]['x']:self.map[name]['x']+self.map[name]['w']]
+        if self.map[name]['y'] > 0:
+            sprite_y = self.map[name]['y']-1
+        else:
+            sprite_y = self.map[name]['y']
+        
+        if self.map[name]['x'] > 0:
+            sprite_x = self.map[name]['x']-1
+        else:
+            sprite_x = self.map[name]['x']
+
+        return self.spritesheet[sprite_y:sprite_y+self.map[name]['h']+2, sprite_x:sprite_x+self.map[name]['w']+2]
     
     def get_sprite_names(self):
         return list(self.map.keys())
@@ -293,13 +309,19 @@ class App(cus_tk.CTk):
                     sprite_xml_height = int(node.attrib.get('h'))
                     sprite_height, sprite_width, sprite_depth = sprite_data.shape
 
-                    if sprite_height != sprite_xml_height or sprite_width != sprite_xml_width:
-                        self.write_to_textbox("Aborting (shape mismatch)")
-                        messagebox.showinfo("SAS4 Texture Tool", f"Sprite mismatch found for:\n{name}.{file_type}\nExpected: ({sprite_xml_width}, {sprite_xml_height}), found: ({sprite_width}, {sprite_width})\n\nUse generate if you want to make a new sheet")
+                    # Dumb nk sprite size to xml mismatches
+                    if sprite_height != sprite_xml_height+2 or sprite_width != sprite_xml_width+2:
+                        self.write_to_textbox("Aborting (shape mismatch)") # TODO: better message due to +2+2
+                        messagebox.showinfo("SAS4 Texture Tool", f"Sprite mismatch found for:\n{name}.{file_type}\nExpected: ({sprite_xml_width+2}, {sprite_xml_height+2}), found: ({sprite_width}, {sprite_height})\n\nUse generate if you want to make a new sheet")
                         return
                     
-                    sheet_x = int(node.attrib.get("x"))
-                    sheet_y = int(node.attrib.get("y"))
+                    sheet_x = int(node.attrib.get("x"))-1
+                    sheet_y = int(node.attrib.get("y"))-1
+
+                    if sheet_x == -1 or sheet_y == -1:
+                        messagebox.showinfo("SAS4 Texture Tool", f"Incompatible x or y value for: {sprite_file} ({selected_folder})")
+                        return
+
                     background_img[sheet_y:sheet_y+sprite_height, sheet_x:sheet_x+sprite_width, 0:sprite_depth] = sprite_data
         
         try:
@@ -336,10 +358,6 @@ class App(cus_tk.CTk):
                 else:
                     name = node.attrib.get('name')
                     sprite_file = f"{name}.{file_type}"
-                    # if not sprite_file in filenames:
-                    #     self.write_to_textbox("Aborting (sprite not found)\n")
-                    #     messagebox.showinfo("SAS4 Texture Tool", f"Sprite not found: {name}.{file_type}")
-                    #     return
                     
                     initial_sprite_data = cv2.imread(os.path.join(selected_folder, sprite_file), cv2.IMREAD_UNCHANGED)
                     # Only used for placements, the image on disk remains the original size
@@ -354,12 +372,8 @@ class App(cus_tk.CTk):
         bounding_box = rpack.bbox_size(sizes, positions)
         # print(f"Sheet size: {bounding_box[0]} width, {bounding_box[1]} height")
 
-        background_img = np.zeros((bounding_box[1], bounding_box[0], 4), dtype=np.uint8)
+        background_img = np.zeros((bounding_box[1]+1, bounding_box[0]+1, 4), dtype=np.uint8)
         background_img[0,0,0:3] = 255
-        x_pos_ms1 = 0
-        x_pos_ms2 = 0
-        y_pos_ms1 = 0
-        y_pos_ms2 = 0
 
         gen_sheet_out = f"{self.script_out}/SpritesheetGenerated"
         try:
@@ -367,12 +381,13 @@ class App(cus_tk.CTk):
         except Exception as exc:
             pass
 
-        
+        # TODO: Warning/handling sprites smaller than 3
         with open(os.path.join(gen_sheet_out, f"{sheet_name}.xml"), "w") as out_xml_file:
             out_xml_file.write("<SpriteInformation>")
-            out_xml_file.write(f"""\t<FrameInformation name="{sheet_name}" texw="{bounding_box[0]}" texh="{bounding_box[1]}" type="{file_type}">""")
+            out_xml_file.write(f"""\t<FrameInformation name="{sheet_name}" texw="{bounding_box[0]+1}" texh="{bounding_box[1]+1}" type="{file_type}">""")
             for index, node in enumerate(nodes):
-                x_pos, y_pos = positions[index]
+                x_pos = positions[index][0]
+                y_pos = positions[index][1]
                 name = node.attrib.get('name')
                 sprite_file = f"{name}.{file_type}"
 
@@ -388,41 +403,40 @@ class App(cus_tk.CTk):
                 initial_h = int(node.attrib['h'])
                 w_to_aw_ratio = initial_aw/initial_w
                 h_to_ah_ratio = initial_ah/initial_h
-                
-                # print(f"Name: {name} - Width Ratio: {w_to_aw_ratio}, Width: {sprite_width} Adjusted: {sprite_width*w_to_aw_ratio}")
+                #  cv2.copyMakeBorder(sprite_data, 1,1,1,1, borderType=cv2.BORDER_CONSTANT, value=(255,20,147,255))
                 background_img[y_pos:y_pos+sprite_height, x_pos:x_pos+sprite_width, 0:sprite_depth] = sprite_data
-                # TODO: fix x/y values --> can't be fixed, nk uses dumb "the sprite used is larger than the xml xy" bs
-                node.attrib['x'] = str(x_pos)
-                node.attrib['y'] = str(y_pos)
-                node.attrib['w'] = str(sprite_width)
-                node.attrib['h'] = str(sprite_height)
-                node.attrib['aw'] = str(round(sprite_width*w_to_aw_ratio))
-                node.attrib['ah'] = str(round(sprite_height*h_to_ah_ratio))
+                node.attrib['x'] = str(x_pos+1)
+                node.attrib['y'] = str(y_pos+1) # TODO: Some sprites need +1 others dont, note which ones do at some point. 
+                node.attrib['w'] = str(sprite_width-2)
+                node.attrib['h'] = str(sprite_height-2)
+                node.attrib['aw'] = str(round((sprite_width-2)*w_to_aw_ratio))
+                node.attrib['ah'] = str(round((sprite_height-2)*h_to_ah_ratio))
                 out_xml_file.write(f"""\t\t{etree.tostring(node).decode()}""")
 
-                # if name == "store_Blue_Innerr" or name == "news_red_Inner":
-                #     print("### YES ###")
-                #     print(name, y_pos, x_pos, sprite_data.shape, sprite_file)
-                    # x_pos_ms1 = x_pos
-                    # x_pos_ms2 = x_pos+sprite_width
-                    # y_pos_ms1 = y_pos
-                    # y_pos_ms2 = y_pos+sprite_height
-                    # print(background_img[y_pos_ms1:y_pos_ms2, x_pos_ms1:x_pos_ms2])
+                """
+                # Dumb nk sprite size to xml mismatches
+                    if sprite_height != sprite_xml_height+2 or sprite_width != sprite_xml_width+2:
+                        self.write_to_textbox("Aborting (shape mismatch)") # TODO: better message due to +2+2
+                        messagebox.showinfo("SAS4 Texture Tool", f"Sprite mismatch found for:\n{name}.{file_type}\nExpected: ({sprite_xml_width+2}, {sprite_xml_height+2}), found: ({sprite_width}, {sprite_height})\n\nUse generate if you want to make a new sheet")
+                        return
+                    
+                    sheet_x = int(node.attrib.get("x"))-1
+                    sheet_y = int(node.attrib.get("y"))-1
+
+                    if sheet_x == -1 or sheet_y == -1:
+                        messagebox.showinfo("SAS4 Texture Tool", f"Incompatible x or y value for: {sprite_file} ({selected_folder})")
+                        return
+
+                    background_img[sheet_y:sheet_y+sprite_height, sheet_x:sheet_x+sprite_width, 0:sprite_depth] = sprite_data
+                """
 
             
             out_xml_file.write("\t</FrameInformation>")
             out_xml_file.write("</SpriteInformation>")
             
-
-        # print("##", background_img[y_pos_ms1:y_pos_ms2, x_pos_ms1:x_pos_ms2])
-        # cv2.imshow("image", background_img)
-        # cv2.waitKey()
-        # cv2.imwrite(os.path.join(self.script_out, "Spritesheets", sheet_name, f"{sheet_name}.{file_type}"), background_img)
-        # bordered_background = cv2.copyMakeBorder(background_img, 1,1,1,1, borderType=cv2.BORDER_CONSTANT, value=(0,0,0,0))
         cv2.imwrite(os.path.join(gen_sheet_out, f"{sheet_name}.{file_type}"), background_img)
         self.wtt_stop = True
         self.write_to_textbox("Finished\n")
-        # print(os.path.join(self.script_out, f"{sheet_name}.{file_type}"))
 
 
 
@@ -465,9 +479,12 @@ class App(cus_tk.CTk):
             except OSError as OSexc:
                 faulty_file = re.findall("'{1}.+'{1}", str(OSexc))[0].strip("'")
                 messagebox.showinfo("SAS4 Texture Tool - compile pngs", f"There was a problem with the following file:\n\n{faulty_file}")
+            except CombineSheetXYError as CSXYexc:
+                messagebox.showinfo("SAS4 Texture Tool - compile pngs", CSXYexc)
             except Exception as exc:
                 messagebox.showerror("SAS4 Texture Tool - compile pngs", f"Unexpected {exc.__class__.__name__}:\n\n{str(exc)}")
 
+            # TODO: Handle AttributeError: '_tkinter.tkapp' object has no attribute '_jet_output_name' when using compile on a folder that can't be compiled
             _delete_cache_files(os.path.join(os.getcwd(), "STTInternal", "Cache", self._jet_output_name))
 
         self.write_to_textbox("Finished\n")
@@ -495,7 +512,7 @@ class App(cus_tk.CTk):
 
         pyminizip.compress_multiple(files_to_zip, path_to_file_temp, f"{self._jet_output_name}.jet", self._pas_value, 0)
 
-
+    # compile sheet jet
     def create_sheets(self, selected_folder):
         self.write_to_textbox("Combining sprites...")
         temp_output_folder = os.path.join(os.getcwd(), "STTInternal", "Cache", self._jet_output_name) #os.path.join(os.getcwd(), "STTcache", self._jet_output_name, "Assets", "Textures", "High")
@@ -532,8 +549,19 @@ class App(cus_tk.CTk):
             sprite_name = sprite_cell.attrib.get("name")
             sprite_image = cv2.imread(f"{os.path.join(folder_path, sprite_name)}.{output_png_type}", cv2.IMREAD_UNCHANGED)
             sprite_height, sprite_width, sprite_depth = sprite_image.shape
-            sheet_x = int(sprite_cell.attrib.get("x"))
-            sheet_y = int(sprite_cell.attrib.get("y"))
+            sprite_xml_width = int(sprite_cell.attrib.get("w"))
+            sprite_xml_height = int(sprite_cell.attrib.get("h"))
+            # Dumb nk sprite size to xml mismatches
+            if sprite_height != sprite_xml_height+2 or sprite_width != sprite_xml_width+2:
+                raise CombineSheetXYError(f"Sprite mismatch found for: {sprite_name}.{output_png_type}\nExpected: ({sprite_xml_width+2}, {sprite_xml_height+2}), found: ({sprite_width}, {sprite_height})\n({folder_path})")
+                # self.write_to_textbox("Aborting (shape mismatch)") # TODO: better message due to +2+2
+                # messagebox.showinfo("SAS4 Texture Tool", f"Sprite mismatch found for:\n{name}.{file_type}\nExpected: ({sprite_xml_width+2}, {sprite_xml_height+2}), found: ({sprite_width}, {sprite_height})\n\nUse generate if you want to make a new sheet")
+                # return
+
+            sheet_x = int(sprite_cell.attrib.get("x"))-1
+            sheet_y = int(sprite_cell.attrib.get("y"))-1
+            if sheet_x == -1 or sheet_y == -1:
+                raise CombineSheetXYError(f"Incompatible x or y value for: {sprite_name}.{output_png_type} ({folder_path})")
 
             background_img[sheet_y:sheet_y+sprite_height, sheet_x:sheet_x+sprite_width, 0:sprite_depth] = sprite_image
 

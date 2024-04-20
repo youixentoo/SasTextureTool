@@ -1,9 +1,12 @@
 # Private and stuff that shouldn't be on github
 .env
 passw.py
+textures.py
 *.jet
 STTInternal/Cache/*
 STTOut
+forntend_sheets
+pyinstaller.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
