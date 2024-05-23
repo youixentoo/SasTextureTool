@@ -465,8 +465,7 @@ class App(cus_tk.CTk):
                 t2 = threading.Thread(target=self.determine_structure, args=(selected_folder, ))
                 t2.start()
             # self.zip_sheets(selected_folder)
-
-    # TODO: STTOUT location gets fucked after compiling map jet         
+    
     def determine_structure(self, selected_folder):
         self.clear_textbox()
         self._sprite_compile_spriteInfo_path = ""
