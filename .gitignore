@@ -7,6 +7,7 @@ STTInternal/Cache/*
 STTOut
 forntend_sheets
 pyinstaller.txt
+*.bat
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

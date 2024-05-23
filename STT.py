@@ -116,7 +116,7 @@ class SpriteSheet_jet(SpriteSheet):
 
 
 class App(cus_tk.CTk):
-    def __init__(self):
+    def __init__(self, init_folder):
         super().__init__()
         self.filepath = "" 
         self.script_out = "STTOut"
@@ -125,7 +125,7 @@ class App(cus_tk.CTk):
         self._split_checkvar = cus_tk.StringVar(value=False)
         self.wtt_stop = False
         self._sll_value = False
-        self._file_dir = os.path.dirname(os.path.abspath(__file__))
+        self._file_dir = init_folder # os.path.dirname(os.path.abspath(__file__))
         # >>>>> Replace when building TODO: <<<<<
         self._pas_value = passw.passw()
 
@@ -763,13 +763,13 @@ def _delete_cache_files(cache_jet):
         messagebox.showerror("SAS4 Texture Tool - Delete cache", f"Unexpected {exc.__class__.__name__}:\n\n{str(exc)}")
 
 
-def __create_folders():
+def __create_folders(init_folder):
     #   STTInternal
     #       |- Cache                
     #       |- Data
 
     try:
-        os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), "STTInternal", "Cache"))
+        os.makedirs(os.path.join(init_folder, "STTInternal", "Cache"))
     except FileExistsError:
         pass
     except Exception as exc:
@@ -778,6 +778,7 @@ def __create_folders():
 
 
 if __name__ == "__main__":
-    __create_folders()
-    app = App()
+    init_folder = os.getcwd()
+    __create_folders(init_folder)
+    app = App(init_folder)
     app.mainloop()
