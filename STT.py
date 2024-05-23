@@ -16,6 +16,7 @@ import re
 import passw
 import rpack
 
+
 cus_tk.set_appearance_mode("system")
 cus_tk.set_default_color_theme("blue")
 
@@ -124,8 +125,11 @@ class App(cus_tk.CTk):
         self._split_checkvar = cus_tk.StringVar(value=False)
         self.wtt_stop = False
         self._sll_value = False
+        self._file_dir = os.path.dirname(os.path.abspath(__file__))
         # >>>>> Replace when building TODO: <<<<<
         self._pas_value = passw.passw()
+
+        self.protocol("WM_DELETE_WINDOW", self.__on_close)
 
         #  pady=12, padx=10
         # configure window
@@ -176,11 +180,15 @@ class App(cus_tk.CTk):
         self.sheet_compile_button.grid(row=5, column=0, padx=(12, 10), pady=(6,12))
 
 
-
         self.text = cus_tk.CTkTextbox(self)
         self.text.configure(state="disabled")
         self.text.grid(row=1, column=2, rowspan=10, sticky="nsew", padx=20, pady=(10,10))
 
+
+    # This doesn't do anything really
+    def __on_close(self):
+        self.destroy()
+        
 
     def clear_textbox(self):
         self.text.configure(state="normal")
@@ -210,7 +218,6 @@ class App(cus_tk.CTk):
             if self.wtt_stop:
                 self.wtt_stop = False
                 break
-
 
 
     # Main function for spritesheet split button
@@ -256,7 +263,6 @@ class App(cus_tk.CTk):
 
             else:
                 messagebox.showinfo("SAS4 Texture Tool", f"No xml file found for spritesheet: {sheet_name}")
-
 
 
     # Main function for spritesheet combine button
@@ -361,10 +367,10 @@ class App(cus_tk.CTk):
                     
                     initial_sprite_data = cv2.imread(os.path.join(selected_folder, sprite_file), cv2.IMREAD_UNCHANGED)
                     # Only used for placements, the image on disk remains the original size
-                    sprite_data = cv2.copyMakeBorder(initial_sprite_data, 1,0,1,0, borderType=cv2.BORDER_CONSTANT, value=(0,0,0,0))
+                    # sprite_data_border = cv2.copyMakeBorder(initial_sprite_data, 0,2,0,2, borderType=cv2.BORDER_CONSTANT, value=(0,0,0,0))
                     # sprite_xml_width = int(node.attrib.get('w'))
                     # sprite_xml_height = int(node.attrib.get('h'))
-                    sprite_height, sprite_width, sprite_depth = sprite_data.shape
+                    sprite_height, sprite_width, sprite_depth = initial_sprite_data.shape
                     nodes.append(node)
                     sizes.append((sprite_width, sprite_height))
         
@@ -397,6 +403,12 @@ class App(cus_tk.CTk):
                     print("not 4 depth")
                     print(name, sprite_depth)
 
+                # sprite_data = sprite_data[0, :, 0] = 255
+                # sprite_data = sprite_data[0, :, 1] = 20
+                # sprite_data = sprite_data[0, :, 2] = 147
+                # sprite_data = sprite_data[0, :, 3] = 255
+                # sprite_data = cv2.line(sprite_data, (0,0), (sprite_width,0), (255, 20, 147, 255), 1)
+
                 initial_aw = int(node.attrib['aw'])
                 initial_w = int(node.attrib['w'])
                 initial_ah = int(node.attrib['ah'])
@@ -428,6 +440,11 @@ class App(cus_tk.CTk):
                         return
 
                     background_img[sheet_y:sheet_y+sprite_height, sheet_x:sheet_x+sprite_width, 0:sprite_depth] = sprite_data
+
+                    ell cell = new Cell { Ay = ((Croptopw) - (jb.Height - Cropbottomw)) / 2, Ah = allimages[allimages.Count - 1].img.Height , 
+                                          Aw = allimages[allimages.Count - 1].img.Width , Ax = ((Cropleftw) - (jb.Width - Croprightw)) / 2, 
+                                          Name = imgname.Replace(".png",""), H = allimages[allimages.Count - 1].img.Height, W = allimages[allimages.Count - 1].img.Width };
+                    
                 """
 
             
@@ -440,7 +457,6 @@ class App(cus_tk.CTk):
 
 
 
-
     # Main function for .jet compile button
     def compile(self):
             self._is_compressable = True
@@ -450,32 +466,38 @@ class App(cus_tk.CTk):
                 t2.start()
             # self.zip_sheets(selected_folder)
 
-                
+    # TODO: STTOUT location gets fucked after compiling map jet         
     def determine_structure(self, selected_folder):
         self.clear_textbox()
         self._sprite_compile_spriteInfo_path = ""
+        map_name = None
         # Determine file structure
         self.write_to_textbox("Checking folder...")
         for subdir, dirs, files in os.walk(selected_folder):
             if subdir.endswith("High") and len(files) > 0:
                 pass
+            elif subdir.endswith("MapData"):
+                map_name = os.listdir(subdir)[0]
             elif len(files) > 1:
                 self._is_compressable = False
             else:
                 # SpriteInfo and empty folders
                 if len(files) == 1:
                     self._jet_output_name = files[0].replace("_SpriteInfo.xml", "") 
-                    self._sprite_compile_spriteInfo_path = os.path.normpath(os.path.join(os.getcwd(), subdir))
+                    self._sprite_compile_spriteInfo_path = os.path.normpath(os.path.join(self._file_dir, subdir))
 
         if self._is_compressable:
+            if map_name:
+                self.mapdata_compressable_uncomp(selected_folder, map_name)
+
             try:
-                self.zip_sheets(selected_folder)
+                self.zip_sheets(selected_folder, map_name)
             except Exception as exc:
                 messagebox.showerror("SAS4 Texture Tool - compile sheets", f"Unexpected {exc.__class__.__name__}:\n\n{str(exc)}")
         else:
             try:
-                temp_output_folder = self.create_sheets(selected_folder)
-                self.zip_sheets(os.path.join(os.getcwd(), temp_output_folder))
+                temp_output_folder = self.create_sheets(map_name)
+                self.zip_sheets(os.path.join(self._file_dir, temp_output_folder), map_name)
             except OSError as OSexc:
                 faulty_file = re.findall("'{1}.+'{1}", str(OSexc))[0].strip("'")
                 messagebox.showinfo("SAS4 Texture Tool - compile pngs", f"There was a problem with the following file:\n\n{faulty_file}")
@@ -483,22 +505,38 @@ class App(cus_tk.CTk):
                 messagebox.showinfo("SAS4 Texture Tool - compile pngs", CSXYexc)
             except Exception as exc:
                 messagebox.showerror("SAS4 Texture Tool - compile pngs", f"Unexpected {exc.__class__.__name__}:\n\n{str(exc)}")
-
+            
             # TODO: Handle AttributeError: '_tkinter.tkapp' object has no attribute '_jet_output_name' when using compile on a folder that can't be compiled
-            _delete_cache_files(os.path.join(os.getcwd(), "STTInternal", "Cache", self._jet_output_name))
+
+            # Issue with winerror 32 was caused by cwd being inside the MapData folder
+            os.chdir(self._file_dir)
+            _delete_cache_files(os.path.join(self._file_dir, "STTInternal", "Cache", self._jet_output_name))
 
         self.write_to_textbox("Finished\n")
+
+
+    def mapdata_compressable_uncomp(self, selected_folder, map_name):
+        mapData_folder = os.path.join(selected_folder, "Assets", "MapData", map_name)
+        pyminizip.uncompress(os.path.join(mapData_folder, "data"), self._pas_value, mapData_folder, 0)
                 
     
-    def zip_sheets(self, folder):
+    def zip_sheets(self, folder, map_name=None):
         self.write_to_textbox("Zipping files...")
         file_div_path_to_file = []
         for subdir, dirs, files in os.walk(folder):
-            for file in files:
-                if file.endswith("_SpriteInfo.xml"):
-                    internal_zip_path = "Assets/Textures"
+            # if len(files) > 0:
+            #     print(subdir)
+            files_iter = iter(files)
+            for file in files_iter:
+                if isinstance(map_name, str) and subdir.endswith(map_name): # short circuit, 2nd only if map jet
+                    if file == "data":
+                        file = next(files_iter)
+                    internal_zip_path = f"Assets/MapData/{map_name}"
                 else:
-                    internal_zip_path = "Assets/Textures/High"
+                    if file.endswith("_SpriteInfo.xml"):
+                        internal_zip_path = "Assets/Textures"
+                    else:
+                        internal_zip_path = "Assets/Textures/High"
 
                 file_div_path_to_file.append([os.path.join(os.path.normpath(subdir), file),internal_zip_path])
 
@@ -510,14 +548,29 @@ class App(cus_tk.CTk):
         except Exception as exc:
             messagebox.showerror("SAS4 Texture Tool - zip sheets", f"Unexpected {exc.__class__.__name__}:\n\n{str(exc)}")
 
-        pyminizip.compress_multiple(files_to_zip, path_to_file_temp, f"{self._jet_output_name}.jet", self._pas_value, 0)
+        pyminizip.compress_multiple(files_to_zip, path_to_file_temp, f"{os.path.join(self._file_dir,self._jet_output_name)}.jet", self._pas_value, 0)
+
+        # Delete the files again extracted from the data zip
+        if map_name:
+            mapData_folder = os.path.join(folder, "Assets", "MapData", map_name)
+            try:
+                for file_del in os.listdir(mapData_folder):
+                    if not file_del == "data":
+                        os.remove(os.path.join(mapData_folder, file_del))
+            except Exception as exc:
+                raise exc
+
 
     # compile sheet jet
-    def create_sheets(self, selected_folder):
+    def create_sheets(self, map_name):
         self.write_to_textbox("Combining sprites...")
-        temp_output_folder = os.path.join(os.getcwd(), "STTInternal", "Cache", self._jet_output_name) #os.path.join(os.getcwd(), "STTcache", self._jet_output_name, "Assets", "Textures", "High")
+        temp_output_folder = os.path.join(self._file_dir, "STTInternal", "Cache", self._jet_output_name) #os.path.join(os.getcwd(), "STTcache", self._jet_output_name, "Assets", "Textures", "High")
         _create_temp_to_zip(os.path.join(temp_output_folder, "Assets", "Textures", "High"))
         
+        if map_name:
+            _create_temp_to_zip(os.path.join(temp_output_folder, "Assets", "MapData", f"{map_name}"))
+            pyminizip.uncompress(os.path.join(self._sprite_compile_spriteInfo_path.rstrip("Textures"), "MapData", map_name, "data"), self._pas_value, os.path.join(temp_output_folder, "Assets", "MapData", f"{map_name}"), 0)
+
         sprite_tree = etree.parse(f"{os.path.join(self._sprite_compile_spriteInfo_path, self._jet_output_name)}_SpriteInfo.xml")
         sprite_info_list = sprite_tree.findall(".//SpriteInfoXml")
         copy2(f"{os.path.join(self._sprite_compile_spriteInfo_path, self._jet_output_name)}_SpriteInfo.xml", 
@@ -572,7 +625,6 @@ class App(cus_tk.CTk):
     # Main function for .jet split button
     def extract(self):
         filename = cus_tk.filedialog.askopenfilename(filetypes=[("Compressed Textures", "*.jet")])
-        # print("filename: ", filename)
         if filename.endswith(".jet"):
             try:
                 self.extract_files_intermediate(filename)
@@ -593,6 +645,8 @@ class App(cus_tk.CTk):
     def extract_files(self, filename):
         self.clear_textbox()
         self.write_to_textbox("Unzipping files", True)
+        self.prefix = None
+        is_map_jet = False
         with zipfile.ZipFile(filename) as files:
             sprite_sheets = []
             for name in files.namelist():
@@ -600,10 +654,15 @@ class App(cus_tk.CTk):
                     if name.endswith(".xml"):
                         if not name.endswith("SpriteInfo.xml"):
                             sprite_sheets.append(SpriteSheet_jet(name, files, self._pas_value))
-                            # return
                         else:
-                            self.prefix = f"{self.script_out}/Jets/{name.replace("Assets/Textures/", "").replace("_SpriteInfo.xml", "")}"
+                            if not self.prefix:
+                                self.prefix = f"{self.script_out}/Jets/{name.replace("Assets/Textures/", "").replace("_SpriteInfo.xml", "")}"
                             self.write_spriteInfo_make_mainDir("/Assets/Textures/", files.read(name, pwd=self._pas_value.encode()), name.replace("/Assets/Textures/", ""))
+                elif name.startswith(f"Assets/MapData") and not name.endswith("/"):
+                    is_map_jet = True
+                    *location, map_data_file = name.split("/")
+                    self.prefix = f"{self.script_out}/Jets/{location[-1]}"
+                    self.map_data_inloop_copy("/".join(location), map_data_file, files.read(name, pwd=self._pas_value.encode()))
 
         self.wtt_stop = True                   
         self.write_to_textbox("Exporting files...") 
@@ -613,6 +672,10 @@ class App(cus_tk.CTk):
         else:
             self.extract_pngs(sprite_sheets, "High")
 
+        if is_map_jet:
+            self.map_data_pack_delete("/".join(location))
+
+        self.prefix = None
         self.write_to_textbox("Finished\n")
 
 
@@ -627,7 +690,6 @@ class App(cus_tk.CTk):
 
 
     def extract_pngs(self, sprite_sheets, output_folder):
-        
         for sprite_sheet in sprite_sheets:
             sprites_output = f"{self.prefix}/Assets/Textures/{output_folder}/{sprite_sheet.file_name}"
             try:
@@ -641,15 +703,42 @@ class App(cus_tk.CTk):
 
 
     def extract_sheets(self, sprite_sheets, output_folder):
-        
         for sprite_sheet in sprite_sheets:
-            sprites_output = f"{self.prefix}/Assets/Textures/{output_folder}"
+            sprites_output = os.path.join(self._file_dir, self.prefix, "Assets", "Textures", output_folder)
             try:
                 os.makedirs(sprites_output)
             except Exception as exc:
                 pass
             sprite_sheet.save_spritesheet(sprites_output)
             sprite_sheet.xml_to_dir(sprites_output)
+
+    # Write the mapdata files (will be deleted after repacking)
+    def map_data_inloop_copy(self, location, data_entry, file_data):
+        try:
+            os.makedirs(f"{self.prefix}/{location}")
+        except Exception as exc:
+            pass
+
+        with open(f"{self.prefix}/{location}/{data_entry}", "wb") as map_data_out_file:
+            map_data_out_file.write(file_data)
+
+    # Repack the mapdata files and delete the individual files
+    def map_data_pack_delete(self, location):
+        # Remove any existing zips
+        try:
+            os.remove(f"{self.prefix}/{location}/data")
+        except Exception:
+            pass
+
+        map_data_files = os.listdir(f"{self.prefix}/{location}")
+        path_to_files = [f"{self.prefix}/{location}/{file}" for file in map_data_files]
+        pyminizip.compress_multiple(path_to_files, ["" for x in map_data_files], f"{self.prefix}/{location}/data", self._pas_value, 0)
+
+        for filename in map_data_files:
+            try:
+                os.remove(f"{self.prefix}/{location}/{filename}")
+            except Exception:
+                pass
 
 
 def loop_list(input_list):
@@ -667,8 +756,11 @@ def _create_temp_to_zip(cache_loc):
 
 def _delete_cache_files(cache_jet):
     try:
-        rmtree(cache_jet)
+        rmtree(cache_jet, ignore_errors=True)
+    except PermissionError as permExc:
+        raise permExc
     except Exception as exc:
+        # raise exc
         messagebox.showerror("SAS4 Texture Tool - Delete cache", f"Unexpected {exc.__class__.__name__}:\n\n{str(exc)}")
 
 
@@ -678,11 +770,12 @@ def __create_folders():
     #       |- Data
 
     try:
-        os.makedirs(os.path.join(os.getcwd(), "STTInternal", "Cache"))
+        os.makedirs(os.path.join(os.path.dirname(os.path.abspath(__file__)), "STTInternal", "Cache"))
     except FileExistsError:
         pass
     except Exception as exc:
         messagebox.showerror("SAS4 Texture Tool - Create internal", f"Unexpected {exc.__class__.__name__}:\n\n{str(exc)}")
+
 
 
 if __name__ == "__main__":
