@@ -113,6 +113,48 @@ class SpriteSheet_jet(SpriteSheet):
         else:
             print("else")
             return None
+        
+
+class FontSheet():
+    # Modified https://stackoverflow.com/a/45527493
+    def __init__(self, data_file, img_file):
+        self.spritesheet = cv2.imread(img_file, cv2.IMREAD_UNCHANGED)
+        if data_file:
+            self.tree = etree.parse(data_file)
+            self.map = {}
+            for node in self.tree.iter():
+                if node.attrib.get('id'):
+                    if node.attrib.get('file'):
+                        self.file_name = node.attrib.get('file')[:-4]
+                    else:
+                        name = node.attrib.get('id')
+                        self.map[name] = {}
+                        self.map[name]['x'] = int(node.attrib.get('x'))
+                        self.map[name]['y'] = int(node.attrib.get('y'))
+                        self.map[name]['w'] = int(node.attrib.get('width'))
+                        self.map[name]['h'] = int(node.attrib.get('height'))
+                        self.map[name]['yo'] = int(node.attrib.get('yoffset'))
+
+    def get_image_rect(self, x, y, w, h):
+        return self.spritesheet[y:y+h, x:x+w]
+
+    def get_image_name(self, name):
+        if name == '32' or name == '9':
+            return None
+            # return np.zeros((15, 9, 4), dtype=np.uint8)
+        else:
+            return self.spritesheet[self.map[name]['y']:self.map[name]['y']+self.map[name]['h'], self.map[name]['x']:self.map[name]['x']+self.map[name]['w']]
+        
+    def get_sprite_names(self):
+        return list(self.map.keys())
+    
+    def write_img_to_dir(self, name, output_dir):
+        font_image = self.get_image_name(name)
+        if isinstance(font_image, np.ndarray):
+            cv2.imwrite(f"{output_dir}{os.sep}{name}.png", font_image)
+
+    def fnt_to_dir(self, output_dir):
+        self.tree.write(f"{output_dir}/{self.file_name}.fnt", pretty_print=True)
 
 
 class App(cus_tk.CTk):
@@ -260,7 +302,18 @@ class App(cus_tk.CTk):
                     sprite_sheet.write_img_to_dir(name, sprites_output)
                 sprite_sheet.xml_to_dir(sprites_output)
                 self.write_to_textbox("Finished\n")
-
+            elif os.path.isfile(f"{filename[:-4]}.fnt"):
+                font_sheet = FontSheet(f"{filename[:-4]}.fnt", filename)
+                font_output = f"{self.script_out}/FontSplit/{sheet_name}"
+                try:
+                    os.makedirs(font_output)
+                except Exception as exc:
+                    pass
+                names = font_sheet.get_sprite_names()
+                for name in names:
+                    font_sheet.write_img_to_dir(name, font_output)
+                font_sheet.fnt_to_dir(font_output)
+                self.write_to_textbox("Finished\n")
             else:
                 messagebox.showinfo("SAS4 Texture Tool", f"No xml file found for spritesheet: {sheet_name}")
 
@@ -280,15 +333,71 @@ class App(cus_tk.CTk):
 
         filenames = next(os.walk(selected_folder), (None, None, []))[2]
         xml_file_search = [s for s in filenames if s.endswith(".xml")]
-        if len(xml_file_search) > 1:
-            self.write_to_textbox("Aborting (multiple .xml files)")
-        elif len(xml_file_search) == 0:
-            self.write_to_textbox("Aborting (no .xml file)")
+        fnt_file_search = [f for f in filenames if f.endswith(".fnt")]
+        # print("xml", xml_file_search, "fnt", fnt_file_search)
+        if len(xml_file_search) > 1 or len(fnt_file_search) > 1:
+            self.write_to_textbox("Aborting (multiple reference files)")
+        elif len(xml_file_search) == 0 and len(fnt_file_search) == 0:
+            self.write_to_textbox("Aborting (no reference files)")
         else:
-            if generate_sheet:
-                self.generate_new_spritesheet(selected_folder, filenames, xml_file_search[0])
-            else:
-                self.combine_single_sheet(selected_folder, filenames, xml_file_search[0])
+            if(len(xml_file_search) == 1):
+                if generate_sheet:
+                    self.write_to_textbox("Generate disabled.")
+                    # self.generate_new_spritesheet(selected_folder, filenames, xml_file_search[0])
+                else:
+                    self.combine_single_sheet(selected_folder, filenames, xml_file_search[0])
+            elif(len(fnt_file_search) == 1):
+                if generate_sheet:
+                    self.write_to_textbox("Generate not supported for font.")
+                else:
+                    self.combine_single_font(selected_folder, filenames, fnt_file_search[0])
+
+
+    def combine_single_font(self, selected_folder, filenames, fnt_file):
+        self.write_to_textbox("Combining font...")
+        fnt_data = etree.parse(os.path.join(selected_folder, fnt_file))
+
+        for node in fnt_data.iter():
+            if node.attrib.get('scaleW'):
+                    print("scale")
+                    sheetW = int(node.attrib.get('scaleW'))
+                    sheetH = int(node.attrib.get('scaleH'))
+                    background_img = np.zeros((sheetH, sheetW, 4), dtype=np.uint8)
+                    background_img[0,0,0:3] = 255
+            elif node.attrib.get('id'):
+                if node.attrib.get('file'):
+                    print("file")
+                    sheet_name = node.attrib.get('file')[:-4]
+                    file_type = node.attrib.get('file')[-3::]
+                    print(f"sheetname: {sheet_name}.{file_type}")
+                elif node.attrib.get('width'):
+                    name = node.attrib.get('id')
+                    sprite_file = f"{name}.{file_type}"
+
+                    sprite_xml_width = int(node.attrib.get('width'))
+                    sprite_xml_height = int(node.attrib.get('height'))
+                    if sprite_xml_width > 0 and sprite_xml_height > 0:
+                        if not sprite_file in filenames:
+                            self.write_to_textbox("Aborting (sprite not found)")
+                            messagebox.showinfo("SAS4 Texture Tool", f"Sprite not found: {name}.{file_type}")
+                            return
+                        
+                        sprite_data = cv2.imread(os.path.join(selected_folder, sprite_file), cv2.IMREAD_UNCHANGED)
+                        sprite_height, sprite_width, sprite_depth = sprite_data.shape
+                        
+                        sheet_x = int(node.attrib.get("x"))
+                        sheet_y = int(node.attrib.get("y"))
+
+                        background_img[sheet_y:sheet_y+sprite_height, sheet_x:sheet_x+sprite_width, 0:sprite_depth] = sprite_data
+        
+        try:
+            os.makedirs(os.path.join(self.script_out, "Fonts", sheet_name))
+        except Exception:
+            pass
+
+        copy2(os.path.join(selected_folder, fnt_file), os.path.join(self.script_out, "Fonts", sheet_name))
+        cv2.imwrite(os.path.join(self.script_out, "Fonts", sheet_name, f"{sheet_name}.{file_type}"), background_img)
+        self.write_to_textbox("Finished\n")
 
 
     def combine_single_sheet(self, selected_folder, filenames, xml_file):
