@@ -286,9 +286,9 @@ class App(cus_tk.CTk):
         self.clear_textbox()
         result = re.search(r"\\(?:.(?!\\))+$", filename)
         if result:
-            self.write_to_textbox("Splitting spritesheet...")
             sheet_name = result.group()[1:-4]
             if os.path.isfile(f"{filename[:-4]}.xml"):
+                self.write_to_textbox("Splitting spritesheet...")
                 sprite_sheet = SpriteSheet(f"{filename[:-4]}.xml", filename)
                 sprites_output = f"{self.script_out}/SpritesheetSplit/{sheet_name}"
                 try:
@@ -303,6 +303,7 @@ class App(cus_tk.CTk):
                 sprite_sheet.xml_to_dir(sprites_output)
                 self.write_to_textbox("Finished\n")
             elif os.path.isfile(f"{filename[:-4]}.fnt"):
+                self.write_to_textbox("Splitting font...")
                 font_sheet = FontSheet(f"{filename[:-4]}.fnt", filename)
                 font_output = f"{self.script_out}/FontSplit/{sheet_name}"
                 try:
